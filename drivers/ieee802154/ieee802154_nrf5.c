@@ -48,7 +48,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "nrf_802154.h"
 #include "nrf_802154_const.h"
 
-#ifdef CONFIG_NRF_802154_SER_HOST
+#if defined(CONFIG_NRF_802154_SER_HOST)
 #include "nrf_802154_serialization_error.h"
 #endif
 
@@ -536,6 +536,13 @@ static int nrf5_tx(const struct device *dev,
 	return -EIO;
 }
 
+static uint64_t nrf5_get_time(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return nrf_802154_time_get();
+}
+
 static int nrf5_start(const struct device *dev)
 {
 	ARG_UNUSED(dev);
@@ -885,7 +892,7 @@ void nrf_802154_energy_detection_failed(nrf_802154_ed_error_t error)
 	}
 }
 
-#ifdef CONFIG_NRF_802154_SER_HOST
+#if defined(CONFIG_NRF_802154_SER_HOST)
 void nrf_802154_serialization_error(const nrf_802154_ser_err_data_t *p_err)
 {
 	__ASSERT(false, "802.15.4 serialization error");
@@ -908,6 +915,7 @@ static struct ieee802154_radio_api nrf5_radio_api = {
 	.stop = nrf5_stop,
 	.tx = nrf5_tx,
 	.ed_scan = nrf5_energy_scan_start,
+	.get_time = nrf5_get_time,
 	.configure = nrf5_configure,
 };
 
