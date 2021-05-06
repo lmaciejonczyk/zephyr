@@ -150,7 +150,12 @@ enum ieee802154_config_type {
 	/** Specifies new radio event handler. Specifying NULL as a handler
 	 *  will disable radio events notification.
 	 */
-	IEEE802154_CONFIG_EVENT_HANDLER
+	IEEE802154_CONFIG_EVENT_HANDLER,
+
+	/** Enable/disable or update Enhanced-ACK Based Probing in radio
+	 *  for a specific Initiator.
+	 */
+	IEEE802154_CONFIG_ENH_ACK_PROBING,
 };
 
 /** IEEE802.15.4 driver configuration data. */
@@ -178,6 +183,15 @@ struct ieee802154_config {
 
 		/** ``IEEE802154_CONFIG_EVENT_HANDLER`` */
 		ieee802154_event_cb_t event_handler;
+
+		/** ``IEEE802154_CONFIG_ENH_ACK_PROBING`` */
+		struct {
+			bool lqi : 1;
+			bool link_margin : 1;
+			bool rssi : 1;
+			uint16_t short_addr;
+			const uint8_t *ext_addr;
+		} enh_ack;
 	};
 };
 
