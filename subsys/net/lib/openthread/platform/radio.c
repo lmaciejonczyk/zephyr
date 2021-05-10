@@ -879,7 +879,7 @@ otError otPlatRadioSetTransmitPower(otInstance *aInstance, int8_t aPower)
 	return OT_ERROR_NONE;
 }
 
-#if defined(CONFIG_OPENTHREAD_MLE_LINK_METRICS_ENABLE)
+#if defined(CONFIG_OPENTHREAD_LINK_METRICS)
 otError otPlatRadioConfigureEnhAckProbing(otInstance *aInstance, otLinkMetrics aLinkMetrics,
 					  const otShortAddress aShortAddress,
 					  const otExtAddress *aExtAddress)
@@ -900,5 +900,5 @@ otError otPlatRadioConfigureEnhAckProbing(otInstance *aInstance, otLinkMetrics a
 
 	return result ? OT_ERROR_FAILED : OT_ERROR_NONE;
 }
-#endif /* OPENTHREAD_CONFIG_MLE_LINK_METRICS_ENABLE */
+#endif /* CONFIG_OPENTHREAD_LINK_METRICS */
 
