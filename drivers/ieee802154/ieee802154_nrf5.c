@@ -45,6 +45,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #endif
 
 #include "ieee802154_nrf5.h"
+#include "nrf_802154_config.h"
+#include "nrf_802154_const.h"
 #include "nrf_802154.h"
 
 #ifdef CONFIG_NRF_802154_SER_HOST
@@ -625,6 +627,94 @@ static void nrf5_iface_init(struct net_if *iface)
 	ieee802154_init(iface);
 }
 
+/**
+ * +---------------------------------+----------------------+---------------------------------+-------------------+-------------------+                        
+ * | Length    | Element ID | Type=0 |      Vendor OUI      |                  Vendor Specific Information                            |
+ * +-----------+------------+--------+----------------------+---------------------------------+-------------------+-------------------+                        
+ * |           Bytes: 0-1            |          2-4         |                5                |         6         |   7 (optional)    |                       
+ * +-----------+---------------------+----------------------+---------------------------------+-------------------+-------------------+                        
+ * | Bits: 0-6 |    7-14    |   15   | IE_VENDOR_THREAD_OUI | IE_VENDOR_THREAD_ACK_PROBING_ID | LINK_METRIC_TOKEN | LINK_METRIC_TOKEN |
+ * +-----------+------------+--------+----------------------|---------------------------------|-------------------|-------------------|
+ */
+static uint8_t set_vendor_ie_header(bool lqi, bool link_margin, bool rssi, uint8_t *ie_header)
+{
+	const uint8_t ID_OFFSET = 7;
+	const uint8_t TYPE_OFFSET = 7;
+	const uint16_t ID_MASK = 0x00ff << ID_OFFSET;
+	const uint8_t LENGTH_MASK = 0x7f;
+	const uint8_t TYPE_MASK = 0x01 << TYPE_OFFSET;
+	const uint8_t HEADER_LEN = 2;
+	const uint8_t OUI_SIZE = 3;
+	const uint8_t SUB_TYPE = 1;
+	const uint8_t TYPE = 0x00;
+	uint8_t content_len;
+	uint16_t element_id = 0x0000;
+	uint8_t link_metrics_idx = 6;
+	uint8_t link_metric_data_len = (uint8_t)lqi + (uint8_t)link_margin + (uint8_t)rssi;
+
+	__ASSERT(link_metric_data_len <= 2, "Thread limits to 2 metrics at most");
+
+	if (link_metric_data_len == 0) {
+		return 0;
+	}
+
+	/* Set Element ID */
+	element_id = (((uint16_t)IE_VENDOR_ID) << ID_OFFSET) & ID_MASK;
+	sys_put_le16(element_id, &ie_header[0]);
+
+	/* Set Length - number of octets in content field. */
+	content_len = OUI_SIZE + SUB_TYPE + link_metric_data_len;
+	ie_header[0] = (ie_header[0] & ~LENGTH_MASK) | (content_len & LENGTH_MASK);
+
+	/* Set Type */
+	ie_header[1] = (ie_header[1] & ~TYPE_MASK) | (TYPE & TYPE_MASK);
+
+	/* Set Vendor Oui */
+	sys_put_le24((uint32_t)IE_VENDOR_THREAD_OUI, &ie_header[2]);
+
+	/* Set SubType */
+	ie_header[5] = IE_VENDOR_THREAD_ACK_PROBING_ID;
+
+	/* Set Link Metrics Tokens */
+	if (lqi) {
+		ie_header[link_metrics_idx++] = IE_VENDOR_THREAD_LQI_TOKEN;
+	}
+
+	if (link_margin) {
+		ie_header[link_metrics_idx++] = IE_VENDOR_THREAD_MARGIN_TOKEN;
+	}
+
+	if (rssi) {
+		ie_header[link_metrics_idx++] = IE_VENDOR_THREAD_RSSI_TOKEN;
+	}
+
+	return HEADER_LEN + content_len;
+}
+
+static void nrf5_config_ie_lm(bool lqi, bool link_margin, bool rssi, uint16_t short_addr,
+			      const uint8_t *ext_addr)
+{
+	uint16_t ie_header_len;
+	uint8_t ie_header[NRF_802154_MAX_ACK_IE_SIZE];
+	uint8_t ext_addr_le[EXTENDED_ADDRESS_SIZE];
+	uint8_t short_addr_le[SHORT_ADDRESS_SIZE];
+
+	ie_header_len = set_vendor_ie_header(lqi, link_margin, rssi, ie_header);
+
+	sys_put_le16(short_addr, short_addr_le);
+	sys_memcpy_swap(ext_addr_le, ext_addr, EXTENDED_ADDRESS_SIZE);
+
+	if (ie_header_len > 0) {
+		nrf_802154_ack_data_set(short_addr_le, false, ie_header, ie_header_len,
+					NRF_802154_ACK_DATA_IE);
+		nrf_802154_ack_data_set(ext_addr_le, true, ie_header, ie_header_len,
+					NRF_802154_ACK_DATA_IE);
+	} else {
+		nrf_802154_ack_data_clear(short_addr_le, false, NRF_802154_ACK_DATA_IE);
+		nrf_802154_ack_data_clear(ext_addr_le, true, NRF_802154_ACK_DATA_IE);
+	}
+}
+
 static int nrf5_configure(const struct device *dev,
 			  enum ieee802154_config_type type,
 			  const struct ieee802154_config *config)
@@ -687,6 +777,13 @@ static int nrf5_configure(const struct device *dev,
 
 	case IEEE802154_CONFIG_EVENT_HANDLER:
 		nrf5_data.event_handler = config->event_handler;
+		break;
+
+	case IEEE802154_CONFIG_ENH_ACK_PROBING:
+		nrf5_config_ie_lm(config->enh_ack.lqi, config->enh_ack.link_margin,
+				  config->enh_ack.rssi, config->enh_ack.short_addr,
+				  config->enh_ack.ext_addr);
+		break;
 
 	default:
 		return -EINVAL;
