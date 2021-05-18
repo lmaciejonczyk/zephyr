@@ -608,6 +608,47 @@ static void nrf5_iface_init(struct net_if *iface)
 	ieee802154_init(iface);
 }
 
+static void nrf5_config_mac_keys(uint8_t key_id_mode, uint8_t key_id, uint8_t *prev_key,
+				 uint8_t *curr_key, uint8_t *next_key)
+{
+	nrf_802154_security_error_t err;
+	uint8_t key_id_tmp;
+	nrf_802154_key_t key = {
+		.value.p_cleartext_key = NULL,
+		.id = { 
+			.mode = key_id_mode,
+			.p_key_id = &key_id_tmp,
+		},
+		.type = NRF_802154_KEY_CLEARTEXT,
+		.frame_counter = 0,
+		.use_global_frame_counter = true,
+	};
+
+	__ASSERT_PRINT(key_id_mode == KEY_ID_MODE_1, "Unexpected value, key_id_mode: %d",
+		       key_id_mode);
+
+	key_id_tmp = key_id - 2;
+	nrf_802154_security_key_remove(&key);
+
+	key_id_tmp = key_id - 1;
+	nrf_802154_security_key_remove(&key);
+	key.value.p_cleartext_key = prev_key;
+	err = nrf_802154_security_key_store(&key);
+	__ASSERT_PRINT(err != NRF_802154_SECURITY_ERROR_NONE, "Key storage failed, err: %d", err);
+
+	key_id_tmp = key_id;
+	nrf_802154_security_key_remove(&key);
+	key.value.p_cleartext_key = curr_key;
+	nrf_802154_security_key_store(&key);
+	__ASSERT_PRINT(err != NRF_802154_SECURITY_ERROR_NONE, "Key storage failed, err: %d", err);
+
+	key_id_tmp = key_id + 1;
+	nrf_802154_security_key_remove(&key);
+	key.value.p_cleartext_key = next_key;
+	nrf_802154_security_key_store(&key);
+	__ASSERT_PRINT(err != NRF_802154_SECURITY_ERROR_NONE, "Key storage failed, err: %d", err);
+}
+
 static int nrf5_configure(const struct device *dev,
 			  enum ieee802154_config_type type,
 			  const struct ieee802154_config *config)
@@ -670,6 +711,17 @@ static int nrf5_configure(const struct device *dev,
 
 	case IEEE802154_CONFIG_EVENT_HANDLER:
 		nrf5_data.event_handler = config->event_handler;
+		break;
+
+	case IEEE802154_CONFIG_MAC_KEYS:
+		nrf5_config_mac_keys(config->mac_keys.key_id_mode, config->mac_keys.key_id,
+				     config->mac_keys.prev_key, config->mac_keys.curr_key,
+				     config->mac_keys.next_key);
+		break;
+
+	case IEEE802154_CONFIG_FRAME_COUNTER:
+		nrf_802154_security_global_frame_counter_set(config->frame_counter);
+		break;
 
 	default:
 		return -EINVAL;
