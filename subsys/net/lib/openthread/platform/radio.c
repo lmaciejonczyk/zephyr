@@ -678,11 +678,9 @@ otRadioCaps otPlatRadioGetCaps(otInstance *aInstance)
 		caps |= OT_RADIO_CAPS_SLEEP_TO_TX;
 	}
 
-#if defined(CONFIG_IEEE802154_2015)
 	if (radio_caps & IEEE802154_HW_TX_SEC) {
 		caps |= OT_RADIO_CAPS_TRANSMIT_SEC;
 	}
-#endif
 
 #if defined(CONFIG_NET_PKT_TXTIME)
 	if (radio_caps & IEEE802154_HW_TXTIME) {
