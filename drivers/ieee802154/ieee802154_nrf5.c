@@ -643,7 +643,7 @@ static void nrf5_config_mac_keys(uint8_t key_id_mode, uint8_t key_id, uint8_t *p
 	nrf_802154_key_t key = {
 		.value.p_cleartext_key = NULL,
 		.id = { 
-			.mode = key_id_mode,
+			.mode = key_id_mode >> 3,
 			.p_key_id = &key_id_tmp,
 		},
 		.type = NRF_802154_KEY_CLEARTEXT,
@@ -651,6 +651,8 @@ static void nrf5_config_mac_keys(uint8_t key_id_mode, uint8_t key_id, uint8_t *p
 		.use_global_frame_counter = true,
 	};
 
+	/* Adjust mode value to 802.15.4 spec. */
+	key_id_mode >>= 3;
 	__ASSERT_MSG_INFO(key_id_mode == KEY_ID_MODE_1,
 			  "Unexpected value, key_id_mode: %d", key_id_mode);
 
