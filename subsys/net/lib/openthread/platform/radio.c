@@ -82,7 +82,6 @@ static struct net_buf *tx_payload;
 static const struct device *radio_dev;
 static struct ieee802154_radio_api *radio_api;
 
-static uint8_t key_id;
 static int8_t tx_power;
 static uint16_t channel;
 static bool promiscuous;
@@ -593,13 +592,8 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
 
 	radio_caps = radio_api->get_capabilities(radio_dev);
 
-	if ((sState == OT_RADIO_STATE_RECEIVE) || (radio_caps & IEEE802154_HW_SLEEP_TO_TX)) {
-		if (otMacFrameIsSecurityEnabled(aPacket) &&
-		    otMacFrameIsKeyIdMode1(aPacket) &&
-		    !aPacket->mInfo.mTxInfo.mIsARetx) {
-			otMacFrameSetKeyId(aPacket, key_id);
-		}
-
+	if ((sState == OT_RADIO_STATE_RECEIVE) ||
+	    (radio_caps & IEEE802154_HW_SLEEP_TO_TX)) {
 		if (run_tx_task(aInstance) == 0) {
 			error = OT_ERROR_NONE;
 		}
@@ -943,9 +937,6 @@ void otPlatRadioSetMacKey(otInstance *aInstance, uint8_t aKeyIdMode,
 		.mac_keys.curr_key = (uint8_t *)aCurrKey->m8,
 		.mac_keys.next_key = (uint8_t *)aNextKey->m8,
 	};
-
-	/* Cache the current key ID. */
-	key_id = aKeyId;
 
 	(void)radio_api->configure(radio_dev, IEEE802154_CONFIG_MAC_KEYS,
 				   &config);
