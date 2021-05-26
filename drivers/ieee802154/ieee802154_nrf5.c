@@ -635,50 +635,41 @@ static void nrf5_iface_init(struct net_if *iface)
 	ieee802154_init(iface);
 }
 
-static void nrf5_config_mac_keys(uint8_t key_id_mode, uint8_t key_id, uint8_t *prev_key,
-				 uint8_t *curr_key, uint8_t *next_key)
+static void nrf5_config_mac_keys(struct ieee802154_key *mac_keys)
 {
 	nrf_802154_security_error_t err;
-	uint8_t key_id_tmp;
-	nrf_802154_key_t key = {
-		.value.p_cleartext_key = NULL,
-		.id = { 
-			.mode = key_id_mode >> 3,
-			.p_key_id = &key_id_tmp,
-		},
-		.type = NRF_802154_KEY_CLEARTEXT,
-		.frame_counter = 0,
-		.use_global_frame_counter = true,
+	nrf_802154_key_t key;
+	uint8_t key_id_to_remove;
+
+	__ASSERT(mac_keys, "Invalid argument.");
+
+	/* Remove old invalid key assuming that its index is first_valid_key_id - 1. */
+	key_id_to_remove =
+		(*mac_keys).key_index == 1 ? 0x80 : (*mac_keys).key_index - 1;
+
+	key.id.mode = (*mac_keys).key_id_mode;
+	key.id.p_key_id = &key_id_to_remove;
+
+	nrf_802154_security_key_remove(&key.id);
+
+	while ((*mac_keys).key_value != NULL) {
+		key.value.p_cleartext_key = (*mac_keys).key_value;
+		key.id.mode = (*mac_keys).key_id_mode;
+		key.id.p_key_id = &(*mac_keys).key_index;
+		key.type = NRF_802154_KEY_CLEARTEXT;
+		key.frame_counter = 0;
+		key.use_global_frame_counter =
+			!((*mac_keys).frame_counter_per_key);
+
+		nrf_802154_security_key_remove(&key.id);
+		err = nrf_802154_security_key_store(&key);
+		__ASSERT(
+			err == NRF_802154_SECURITY_ERROR_NONE ||
+				err == NRF_802154_SECURITY_ERROR_ALREADY_PRESENT,
+			"Storing key failed, err: %d", err);
+
+		mac_keys++;
 	};
-
-	/* Adjust mode value to 802.15.4 spec. */
-	key_id_mode >>= 3;
-	__ASSERT_MSG_INFO(key_id_mode == KEY_ID_MODE_1,
-			  "Unexpected value, key_id_mode: %d", key_id_mode);
-
-	key_id_tmp = key_id - 2;
-	nrf_802154_security_key_remove(&key.id);
-
-	key_id_tmp = key_id - 1;
-	nrf_802154_security_key_remove(&key.id);
-	key.value.p_cleartext_key = prev_key;
-	err = nrf_802154_security_key_store(&key);
-	__ASSERT_MSG_INFO(err != NRF_802154_SECURITY_ERROR_NONE,
-			  "Key storage failed, err: %d", err);
-
-	key_id_tmp = key_id;
-	nrf_802154_security_key_remove(&key.id);
-	key.value.p_cleartext_key = curr_key;
-	nrf_802154_security_key_store(&key);
-	__ASSERT_MSG_INFO(err != NRF_802154_SECURITY_ERROR_NONE,
-			  "Key storage failed, err: %d", err);
-
-	key_id_tmp = key_id + 1;
-	nrf_802154_security_key_remove(&key.id);
-	key.value.p_cleartext_key = next_key;
-	nrf_802154_security_key_store(&key);
-	__ASSERT_MSG_INFO(err != NRF_802154_SECURITY_ERROR_NONE,
-			  "Key storage failed, err: %d", err);
 }
 
 static int nrf5_configure(const struct device *dev,
@@ -746,9 +737,7 @@ static int nrf5_configure(const struct device *dev,
 		break;
 
 	case IEEE802154_CONFIG_MAC_KEYS:
-		nrf5_config_mac_keys(config->mac_keys.key_id_mode, config->mac_keys.key_id,
-				     config->mac_keys.prev_key, config->mac_keys.curr_key,
-				     config->mac_keys.next_key);
+		nrf5_config_mac_keys(config->mac_keys);
 		break;
 
 	case IEEE802154_CONFIG_FRAME_COUNTER:
